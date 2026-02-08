@@ -1,53 +1,96 @@
 <nz-modal
-  [nzWidth]="560"
-  [(nzVisible)]="visible"
-  [nzTitle]="detail ? $t('_edit') : $t('_add')"
-  (nzOnCancel)="handleCancel()"
-  (nzOnOk)="handleOk()"
-  [nzOkLoading]="uploading"
+  [nzWidth]="570"
+  [(nzVisible)]="showModal"
+  [nzTitle]="modalTitle"
+  (nzOnCancel)="onClose()"
+  [nzBodyStyle]="{ maxHeight: '70vh', overflowY: 'auto' }"
+  [nzContent]="modalContent"
+  [nzFooter]="modalFooter"
 >
-  <ng-container *nzModalContent>
+  <ng-template #modalContent>
     <form nz-form [formGroup]="validateForm">
       <nz-form-item>
-        <nz-form-label [nzSpan]="4" nzRequired>{{ $t('_webName') }}</nz-form-label>
-        <nz-form-control [nzSpan]="20" [nzErrorTip]="$t('_requiredName')">
-          <input formControlName="title" nz-input [placeholder]="$t('_webTitle')" />
+        <nz-form-label [nzSpan]="4" nzRequired>{{
+          $t('_webLink')
+        }}</nz-form-label>
+        <nz-form-control [nzSpan]="20" [nzErrorTip]="$t('_requiredLink')">
+          <input
+            formControlName="url"
+            nz-input
+            (blur)="onUrlBlur()"
+            #inputUrl
+          />
         </nz-form-control>
       </nz-form-item>
 
       <nz-form-item>
-        <nz-form-label [nzSpan]="4" nzRequired>{{ $t('_webLink') }}</nz-form-label>
-        <nz-form-control [nzSpan]="20" [nzErrorTip]="$t('_requiredLink')">
-          <input formControlName="url" nz-input placeholder="https://nav3.cn" (blur)="onUrlBlur($event)" />
+        <nz-form-label [nzSpan]="4" nzRequired>{{
+          $t('_webName')
+        }}</nz-form-label>
+        <nz-form-control [nzSpan]="20" [nzErrorTip]="$t('_requiredName')">
+          <nz-input-group nzSearch [nzAddOnAfter]="suffixButton">
+            <input
+              #inputTitle
+              formControlName="title"
+              nz-input
+              [readonly]="getting || translating"
+              [placeholder]="getting ? $t('_pendingGet') : ''"
+            />
+          </nz-input-group>
+        </nz-form-control>
+      </nz-form-item>
+      <ng-template #suffixButton>
+        <button
+          *ngIf="isLogin"
+          [disabled]="!title"
+          [nzLoading]="translating"
+          nz-button
+          nzType="primary"
+          nzSearch
+          (click)="handleTranslate('title')"
+        >
+          {{ $t('_translate') }}
+        </button>
+      </ng-template>
+
+      <nz-form-item *ngIf="isLogin">
+        <nz-form-label [nzSpan]="4">{{ $t('_sort') }}</nz-form-label>
+        <nz-form-control [nzSpan]="20">
+          <input
+            formControlName="index"
+            nz-input
+            type="number"
+            [placeholder]="DEFAULT_SORT_INDEX"
+          />
         </nz-form-control>
       </nz-form-item>
 
-      <div class="row">
-        <div class="col">
-          <nz-form-item>
-            <nz-form-label [nzSpan]="15" nzRequired>{{ $t('_shortcut') }}</nz-form-label>
-            <nz-form-control [nzSpan]="9">
-              <nz-switch formControlName="top"></nz-switch>
-            </nz-form-control>
-          </nz-form-item>
-        </div>
-        <div class="col">
-          <nz-form-item>
-            <nz-form-label [nzSpan]="15" nzRequired>{{ $t('_onlyOwnVisible') }}</nz-form-label>
-            <nz-form-control [nzSpan]="9">
-              <nz-switch formControlName="ownVisible"></nz-switch>
-            </nz-form-control>
-          </nz-form-item>
-        </div>
-        <div class="col">
-          <nz-form-item>
-            <nz-form-label [nzSpan]="8">{{ $t('_recommend') }}</nz-form-label>
-            <nz-form-control [nzSpan]="24">
-              <nz-rate formControlName="rate" nzAllowHalf></nz-rate>
-            </nz-form-control>
-          </nz-form-item>
-        </div>
-      </div>
+      <nz-form-item *ngIf="isLogin">
+        <nz-form-label [nzSpan]="4">{{ $t('_shortcut') }}</nz-form-label>
+        <nz-form-control [nzSpan]="20">
+          <nz-switch class="mr-4" formControlName="top"></nz-switch>
+
+          <nz-checkbox-group
+            *ngIf="isTop"
+            [nzOptions]="topOptions"
+            formControlName="topTypes"
+          ></nz-checkbox-group>
+        </nz-form-control>
+      </nz-form-item>
+
+      <nz-form-item *ngIf="isLogin">
+        <nz-form-label [nzSpan]="4">{{ $t('_onlyOwnVisible') }}</nz-form-label>
+        <nz-form-control [nzSpan]="20">
+          <nz-switch formControlName="ownVisible"></nz-switch>
+        </nz-form-control>
+      </nz-form-item>
+
+      <nz-form-item *ngIf="isLogin">
+        <nz-form-label [nzSpan]="4">{{ $t('_score') }}</nz-form-label>
+        <nz-form-control [nzSpan]="20">
+          <nz-rate formControlName="rate" nzAllowHalf></nz-rate>
+        </nz-form-control>
+      </nz-form-item>
 
       <nz-form-item>
         <nz-form-label [nzSpan]="4">{{ $t('_iconAddr') }}</nz-form-label>
@@ -56,60 +99,117 @@
             <input
               formControlName="icon"
               nz-input
-              [placeholder]="$t('_copyUpload')"
-              (blur)="onIconBlur($event)"
-              (focus)="onIconFocus($event)"
+              [readonly]="getting"
+              [placeholder]="getting ? $t('_pendingGet') : ''"
             />
           </nz-input-group>
 
           <ng-template #prefixIcon>
-            <app-logo [src]="iconUrl" [size]="25" *ngIf="iconUrl"></app-logo>
+            <div
+              class="cursor-pointer"
+              (click)="jumpService.goUrl($event, iconUrl)"
+            >
+              <app-logo [src]="iconUrl" [size]="25" *ngIf="iconUrl" />
+            </div>
           </ng-template>
           <ng-template #suffixIconSearch>
-            <i nz-icon nzType="loading" nzTheme="outline" *ngIf="uploading; else loading"></i>
-            <ng-template #loading>
-              <label id="file">
-                <i nz-icon nzType="upload" nzTheme="outline" class="cursor-pointer" [title]="$t('_upload')"></i>
-                <input
-                  type="file"
-                  name="file"
-                  (change)="onChangeFile($event)"
-                  accept="image/*"
-                  class="file-upload"
-                >
-              </label>
-            </ng-template>
+            <ng-content *ngIf="isLogin">
+              <app-upload-image
+                (onChange)="onChangeFile($event, 'icon')"
+              ></app-upload-image>
+            </ng-content>
           </ng-template>
         </nz-form-control>
       </nz-form-item>
+
+      <nz-form-item *ngIf="isLogin">
+        <nz-form-label [nzSpan]="4">{{ $t('_image') }}</nz-form-label>
+        <nz-form-control [nzSpan]="20">
+          <nz-input-group
+            nzSearch
+            [nzPrefix]="prefixImgIcon"
+            [nzAddOnAfter]="suffixImgButton"
+          >
+            <input
+              formControlName="img"
+              nz-input
+              [readonly]="submitting"
+              [placeholder]="$t('_imgPlaceholder')"
+            />
+          </nz-input-group>
+
+          <ng-template #prefixImgIcon>
+            <div
+              class="cursor-pointer"
+              (click)="jumpService.goUrl($event, imgUrl)"
+            >
+              <app-logo [src]="imgUrl" [size]="25" *ngIf="imgUrl" />
+            </div>
+          </ng-template>
+        </nz-form-control>
+      </nz-form-item>
+      <ng-template #suffixImgButton>
+        <span class="mx-2">
+          <app-upload-image
+            (onChange)="onChangeFile($event, 'img')"
+          ></app-upload-image>
+        </span>
+        <button
+          [nzLoading]="submitting"
+          nz-button
+          nzType="primary"
+          nzSearch
+          (click)="getScreenshot()"
+        >
+          {{ $t('_screenshot') }}
+        </button>
+      </ng-template>
 
       <nz-form-item>
         <nz-form-label [nzSpan]="4">{{ $t('_webDesc') }}</nz-form-label>
         <nz-form-control [nzSpan]="20">
           <textarea
+            #inputDesc
             formControlName="desc"
-            placeholder="发现导航, 精选实用导航网站"
             nz-input
             [nzAutosize]="{ minRows: 3, maxRows: 5 }"
+            [readonly]="getting || translating"
+            [placeholder]="getting ? $t('_pendingGet') : ''"
           >
           </textarea>
         </nz-form-control>
       </nz-form-item>
 
       <!-- more url -->
-      <div>
-        <nz-form-item *ngFor="let n of urlArr; let idx = index">
+      <div formArrayName="urlArr">
+        <nz-form-item
+          *ngFor="let n of urlArray.controls; let idx = index"
+          [formGroupName]="idx"
+        >
           <nz-form-label [nzSpan]="4" [nzNoColon]="true"></nz-form-label>
           <nz-form-control [nzSpan]="20">
-            <nz-input-group [nzAddOnBefore]="addOnBeforeTemplate" [nzAddOnAfter]="addOnAfterTemplate">
-              <input [formControlName]="'url' + idx" type="text" nz-input />
+            <nz-input-group
+              [nzAddOnBefore]="addOnBeforeTemplate"
+              [nzAddOnAfter]="addOnAfterTemplate"
+            >
+              <input
+                #inputs
+                formControlName="url"
+                type="text"
+                nz-input
+                [placeholder]="$t('_tagPlaceholder')"
+              />
             </nz-input-group>
             <ng-template #addOnBeforeTemplate>
-              <nz-select style="width: 100px;" [formControlName]="'tagVal' + idx">
+              <nz-select
+                style="width: 100px"
+                formControlName="id"
+                (ngModelChange)="onSelectChange(idx)"
+              >
                 <nz-option
-                  *ngFor="let tag of tags"
-                  [nzLabel]="tag"
-                  [nzValue]="tag"
+                  *ngFor="let tag of tagList()"
+                  [nzLabel]="tag.name"
+                  [nzValue]="tag.id"
                 >
                 </nz-option>
               </nz-select>
@@ -120,7 +220,7 @@
                 nz-icon
                 nzType="minus"
                 nzTheme="outline"
-                (click)="lessMoreUrl()"
+                (click)="lessMoreUrl(idx)"
               >
               </i>
             </ng-template>
@@ -128,7 +228,7 @@
         </nz-form-item>
       </div>
 
-      <nz-form-item *ngIf="tags.length > 0 && urlArr.length < 3">
+      <nz-form-item *ngIf="tagList().length > 0">
         <nz-form-label [nzSpan]="4" [nzNoColon]="true"></nz-form-label>
         <nz-form-control [nzSpan]="20">
           <button nz-button nzType="default" nzBlock (click)="addMoreUrl()">
@@ -137,5 +237,38 @@
         </nz-form-control>
       </nz-form-item>
     </form>
-  </ng-container>
+  </ng-template>
+
+  <ng-template #modalFooter>
+    <button nz-button nzType="default" (click)="onClose()">
+      {{ $t('_cancel') }}
+    </button>
+    <button
+      *ngIf="isLogin"
+      [disabled]="!desc"
+      nz-button
+      nzType="primary"
+      (click)="handleTranslate()"
+      [nzLoading]="translating"
+    >
+      {{ $t('_translate') }}
+    </button>
+    <button
+      nz-button
+      nzType="primary"
+      (click)="checkRepeat()"
+      [disabled]="!url"
+    >
+      <nz-icon nzType="search" />
+      {{ $t('_checkRepeat') }}
+    </button>
+    <button
+      nz-button
+      nzType="primary"
+      (click)="handleOk()"
+      [nzLoading]="submitting || getting || translating"
+    >
+      {{ $t('_submit') }}
+    </button>
+  </ng-template>
 </nz-modal>

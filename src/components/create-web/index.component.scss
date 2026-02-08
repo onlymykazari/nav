@@ -1,8 +1,10 @@
-.file-upload {
-  display: none !important;
-}
-
 .row {
   display: flex;
   justify-content: space-around;
+}
+
+@media (max-width: 580px) {
+  ::ng-deep .ant-modal {
+    top: 0;
+  }
 }

@@ -1,49 +1,60 @@
 <div
-  class="title dark-primary dark-border-color"
+  [id]="'t' + dataSource.id"
+  class="title tool-title dark-primary dark-border-color"
   *ngIf="dataSource && dataSource.title"
 >
-  <span class="cursor-pointer" (click)="onCollapse.emit()">
-    <!-- <app-logo
-      [src]="dataSource.icon"
-      [name]="dataSource.title"
-      colour="#ff4d4f"
-    >
-    </app-logo> -->
-
+  <div
+    class="cursor-pointer whitespace-nowrap ellipsis pr-4 flex items-center"
+    (click)="onCollapse.emit()"
+  >
     <i
       class="iconfont iconjiantouarrow483 down-arrow"
       [class.active]="dataSource.collapsed"
-      *ngIf="arrowType === '1'; else type"
     >
     </i>
-    <ng-template #type>
-      <i
-        class="iconfont iconjiantouarrow483 down-arrow"
-        [class.active]="dataSource.collapsed"
-      >
-      </i>
-    </ng-template>
 
-    <span style="margin-left: 10px;align-self: center;vertical-align: middle;">
-      {{ dataSource.title }} x {{ dataSource.nav.length }}
+    <i
+      class="iconfont iconyinru text-neutral-400"
+      *ngIf="isLogin && dataSource.rId"
+    ></i>
+
+    <span class="ml-1 self-center align-middle">
+      {{ dataSource.title
+      }}{{ dataSource.nav.length < 10 ? '' : ' x ' + dataSource.nav.length }}
     </span>
-  </span>
+
+    <ng-content *ngIf="dataSource.id !== -1">
+      <i
+        nz-icon
+        nzType="edit"
+        class="edit-icon"
+        *ngIf="isLogin"
+        (click)="handleEditName($event, dataSource)"
+      ></i>
+      <i
+        nz-icon
+        nzType="swap"
+        class="edit-icon"
+        *ngIf="isLogin"
+        (click)="openMoveModal($event, dataSource)"
+      ></i>
+      <i
+        nz-icon
+        nzType="delete"
+        class="edit-icon"
+        *ngIf="isLogin"
+        (click)="handleDelete($event, dataSource.id)"
+      ></i>
+    </ng-content>
+  </div>
 
   <i
-    *ngIf="isLogin"
+    *ngIf="dataSource.id !== -1 && (isLogin || permissions.create)"
     nz-icon
     nzType="plus"
     nzTheme="outline"
     class="add-icon"
-    (click)="toggleCreateModal()"
+    (click)="openCreateWebModal()"
   >
   </i>
 </div>
-
-<app-create-web
-  *ngIf="showCreateModal"
-  [visible]="showCreateModal"
-  (onCancel)="toggleCreateModal()"
-  (onOk)="handleAdd($event)"
->
-</app-create-web>

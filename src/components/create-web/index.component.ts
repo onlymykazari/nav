@@ -1,232 +1,507 @@
-// Copyright @ 2018-2022 xiejiahe. All rights reserved. MIT license.
+// 开源项目，未经作者同意，不得以抄袭/复制代码/修改源代码版权信息。
+// Copyright @ 2018-present xiejiahe. All rights reserved.
 // See https://github.com/xjh22222228/nav
 
-import { Component, OnInit, Input, Output, EventEmitter } from '@angular/core'
-import { getLogoUrl, getTextContent } from 'src/utils'
-import { FormBuilder, FormGroup, Validators } from '@angular/forms'
-import { ITagProp, INavFourProp } from 'src/types'
+import {
+  Component,
+  ViewChild,
+  ViewChildren,
+  QueryList,
+  ElementRef,
+  computed,
+} from '@angular/core'
+import { CommonModule } from '@angular/common'
+import { FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { getTextContent, getClassById } from 'src/utils'
+import { getTempId, isSelfDevelop } from 'src/utils/utils'
+import { updateByWeb, pushDataByAny } from 'src/utils/web'
+import { FormBuilder, FormGroup, Validators, FormArray } from '@angular/forms'
+import type { IWebProps, IWebTag } from 'src/types'
+import { TopType, ActionType } from 'src/types'
 import { NzMessageService } from 'ng-zorro-antd/message'
 import { NzNotificationService } from 'ng-zorro-antd/notification'
-import * as __tag from '../../../data/tag.json'
-import { createFile } from 'src/services'
+import {
+  saveUserCollect,
+  getWebInfo,
+  getTranslate,
+  getScreenshot,
+  createImageFile,
+  getImageRepo,
+  getCDN,
+} from 'src/api'
 import { $t } from 'src/locale'
-
-const tagMap: ITagProp = (__tag as any).default
-const tagKeys = Object.keys(tagMap)
+import { settings, navs, tagList, tagMap } from 'src/store'
+import { isLogin, getPermissions } from 'src/utils/user'
+import { NzModalModule } from 'ng-zorro-antd/modal'
+import { NzFormModule } from 'ng-zorro-antd/form'
+import { NzInputModule } from 'ng-zorro-antd/input'
+import { NzSwitchModule } from 'ng-zorro-antd/switch'
+import { NzCheckboxModule } from 'ng-zorro-antd/checkbox'
+import { NzRateModule } from 'ng-zorro-antd/rate'
+import { LogoComponent } from 'src/components/logo/logo.component'
+import { UploadImageComponent } from 'src/components/upload-image/index.component'
+import { NzIconModule } from 'ng-zorro-antd/icon'
+import { NzButtonModule } from 'ng-zorro-antd/button'
+import { NzSelectModule } from 'ng-zorro-antd/select'
+import { SELF_SYMBOL, DEFAULT_SORT_INDEX } from 'src/constants/symbol'
+import { JumpService } from 'src/services/jump'
+import {
+  removeTrailingSlashes,
+  transformSafeHTML,
+  transformUnSafeHTML,
+} from 'src/utils/pureUtils'
+import event from 'src/utils/mitt'
 
 @Component({
+  standalone: true,
+  imports: [
+    CommonModule,
+    FormsModule,
+    ReactiveFormsModule,
+    NzSelectModule,
+    NzModalModule,
+    NzFormModule,
+    NzInputModule,
+    NzSwitchModule,
+    NzCheckboxModule,
+    NzRateModule,
+    LogoComponent,
+    UploadImageComponent,
+    NzIconModule,
+    NzButtonModule,
+  ],
   selector: 'app-create-web',
   templateUrl: './index.component.html',
   styleUrls: ['./index.component.scss'],
 })
-export class CreateWebComponent implements OnInit {
-  @Input() detail: object
-  @Input() visible: boolean
-  @Output() onCancel = new EventEmitter()
-  @Output() onOk = new EventEmitter()
+export class CreateWebComponent {
+  @ViewChildren('inputs') inputs!: QueryList<ElementRef>
+  @ViewChild('inputUrl', { static: false }) inputUrlRef!: ElementRef
+  @ViewChild('inputTitle') inputTitleRef!: ElementRef
+  @ViewChild('inputDesc') inputDescRef!: ElementRef
 
-  $t = $t
-  validateForm!: FormGroup;
-  iconUrl = ''
-  urlArr = []
-  tags = tagKeys
-  tagMap = tagMap
-  uploading = false
+  readonly $t = $t
+  readonly isLogin: boolean = isLogin
+  readonly settings = settings()
+  readonly permissions = getPermissions(settings())
+  readonly DEFAULT_SORT_INDEX = DEFAULT_SORT_INDEX
+  readonly validateForm!: FormGroup
+  readonly tagList = computed(() =>
+    tagList().filter((item) => !(!isLogin && item.noOpen)),
+  )
+  submitting = false
+  getting = false
+  translating = false
+  showModal = false
+  detail: IWebProps | null | undefined = null
+  isMove = false // 提交完是否可以移动
+  parentId: number = -1
+  callback: Function = () => {}
+  topOptions = [
+    { label: TopType[1], value: TopType.Side },
+    { label: TopType[2], value: TopType.Shortcut },
+  ]
+  breadcrumb: string[] = []
 
   constructor(
+    public readonly jumpService: JumpService,
     private fb: FormBuilder,
     private message: NzMessageService,
     private notification: NzNotificationService,
-  ) {}
+  ) {
+    event.on('CREATE_WEB', (props: any) => {
+      this.open(this, props)
+    })
+    event.on('SET_CREATE_WEB', (props: any) => {
+      for (const k in props) {
+        // @ts-ignore
+        this[k] = props[k]
+      }
+    })
 
-  ngOnInit() {
     this.validateForm = this.fb.group({
       title: ['', [Validators.required]],
       url: ['', [Validators.required]],
       top: [false],
+      topTypes: [[]],
       ownVisible: [false],
       rate: [5],
-      url0: [''],
-      url1: [''],
-      url2: [''],
-      tagVal0: [tagKeys[0]],
-      tagVal1: [tagKeys[0]],
-      tagVal2: [tagKeys[0]],
       icon: [''],
       desc: [''],
+      index: [''],
+      img: [''],
+      urlArr: this.fb.array([]),
     })
   }
 
-  ngOnChanges() {
-    // 回显表单
-    setTimeout(() => {
-      if (!this.visible) {
-        this.validateForm.reset()
-      }
-  
-      const detail = this.detail as INavFourProp
-      if (this.detail && this.visible) {
-        this.validateForm.get('title')!.setValue(getTextContent(detail.name))
-        this.validateForm.get('desc')!.setValue(getTextContent(detail.desc))
-        this.validateForm.get('icon')!.setValue(detail.icon || '')
-        this.validateForm.get('url')!.setValue(detail.url || '')
-        this.validateForm.get('top')!.setValue(detail.top ?? false)
-        this.validateForm.get('ownVisible')!.setValue(detail.ownVisible ?? false)
-        this.validateForm.get('rate')!.setValue(detail.rate ?? 5)
-  
-        if (typeof detail.urls === 'object') {
-          let i = 0
-          for (let k in detail.urls) {
-            this.urlArr.push(null)
-            this.validateForm.get(`url${i}`)!.setValue(detail.urls[k])
-            this.validateForm.get(`tagVal${i}`)!.setValue(k)
-            i++
-          }
-        }
-      }
-    }, 100)
+  get modalTitle(): string {
+    const breadcrumb = (this.detail?.breadcrumb || this.breadcrumb).join(' / ')
+    return this.detail
+      ? `${$t('_edit')}（${breadcrumb}）`
+      : `${$t('_add')}（${breadcrumb}）`
   }
 
-  async onUrlBlur(e) {
-    const res = await getLogoUrl(e.target?.value)
-    if (res) {
-      this.iconUrl = res as string
-      this.validateForm.get('icon')!.setValue(this.iconUrl)
+  get urlArray(): FormArray {
+    return this.validateForm.get('urlArr') as FormArray
+  }
+
+  get isTop(): boolean {
+    return this.validateForm.get('top')?.value || false
+  }
+
+  get desc(): string {
+    return (this.validateForm.get('desc')?.value || '').trim()
+  }
+
+  get iconUrl(): string {
+    return (this.validateForm.get('icon')?.value || '').trim()
+  }
+
+  get imgUrl(): string {
+    return (this.validateForm.get('img')?.value || '').trim()
+  }
+
+  get title(): string {
+    return (this.validateForm.get('title')?.value || '').trim()
+  }
+
+  get url(): string {
+    return (this.validateForm.get('url')?.value || '').trim()
+  }
+
+  open(
+    ctx: this,
+    props?: {
+      isKeyboard?: boolean
+      isMove?: boolean
+      parentId?: number
+      detail: IWebProps | null | undefined
+    },
+  ) {
+    if (props?.isKeyboard && this.showModal) {
+      return
     }
+
+    const detail = props?.detail
+    if (!detail) {
+      ctx.parentId = props?.parentId || ctx.parentId
+      if (navs().length === 0) return
+      if (ctx.parentId === -1) {
+        const parentId = navs()[0]?.nav?.[0]?.nav?.[0]?.id
+        if (!parentId) {
+          return
+        }
+        ctx.parentId = parentId
+      }
+    }
+    ctx.detail = detail
+    ctx.showModal = true
+    ctx.isMove = !!props?.isMove
+
+    if (detail) {
+      this.validateForm
+        .get('title')!
+        .setValue(transformUnSafeHTML(getTextContent(detail?.name)))
+      this.validateForm
+        .get('desc')!
+        .setValue(transformUnSafeHTML(getTextContent(detail?.desc)))
+      this.validateForm.get('index')!.setValue(detail?.index ?? '')
+      this.validateForm.get('icon')!.setValue(detail?.icon || '')
+      this.validateForm.get('url')!.setValue(detail?.url || '')
+      this.validateForm.get('top')!.setValue(detail?.top ?? false)
+      this.validateForm.get('topTypes')!.setValue(detail?.topTypes ?? [])
+      this.validateForm.get('ownVisible')!.setValue(detail?.ownVisible ?? false)
+      this.validateForm.get('rate')!.setValue(detail?.rate ?? 5)
+      this.validateForm.get('img')!.setValue(detail?.img ?? '')
+      if (Array.isArray(detail.tags)) {
+        detail.tags.forEach((item: IWebTag) => {
+          ;(this.validateForm?.get('urlArr') as FormArray)?.push(
+            this.fb.group({
+              id: Number(item.id),
+              name: tagMap()[item.id].name ?? '',
+              url: item.url || '',
+            }),
+          )
+        })
+      }
+      const { parentId } = getClassById(detail.id, 0, true)
+      ctx.parentId = parentId
+    } else {
+      const { breadcrumb } = getClassById(ctx.parentId)
+      ctx.breadcrumb = breadcrumb
+    }
+
+    this.focusUrl()
   }
 
-  onIconFocus() {
-    document.addEventListener('paste', this.handlePasteImage)
+  private focusUrl() {
+    setTimeout(() => {
+      if (this.detail) {
+        this.inputTitleRef?.nativeElement?.focus()
+        return
+      }
+      this.inputUrlRef?.nativeElement?.focus()
+    }, 400)
   }
 
-  onIconBlur(e) {
-    document.removeEventListener('paste', this.handlePasteImage)
-    this.iconUrl = e.target.value
+  onClose() {
+    // @ts-ignore
+    this.validateForm.get('urlArr').controls = []
+    this.validateForm.reset()
+    this.showModal = false
+    this.submitting = false
+    this.callback = Function
+  }
+
+  async onUrlBlur() {
+    if (!this.settings.openSearch) {
+      return
+    }
+    let url = this.url
+    if (!url) {
+      return
+    }
+    try {
+      // test url
+      if (url[0] === SELF_SYMBOL) {
+        url = url.slice(1)
+      }
+      new URL(url)
+
+      const iconVal = this.validateForm.get('icon')?.value
+      const titleVal = this.validateForm.get('title')?.value
+      const descVal = this.validateForm.get('desc')?.value
+      if (iconVal && titleVal && descVal) {
+        return
+      }
+
+      this.getting = true
+      const res = await getWebInfo(url)
+      if (res['url'] != null && !iconVal) {
+        this.validateForm.get('icon')!.setValue(res['url'])
+      }
+      if (res['title'] != null && !titleVal) {
+        this.validateForm.get('title')!.setValue(res['title'])
+      }
+      if (res['description'] != null && !descVal) {
+        this.validateForm.get('desc')!.setValue(res['description'])
+      }
+      this.getting = false
+      this.inputUrlRef?.nativeElement?.blur()
+      this.checkRepeat()
+    } catch {}
   }
 
   addMoreUrl() {
-    this.urlArr.push(null)
+    ;(this.validateForm.get('urlArr') as FormArray).push(
+      this.fb.group({
+        id: '',
+        name: '',
+        url: '',
+      }),
+    )
   }
 
-  lessMoreUrl() {
-    this.urlArr.pop()
+  lessMoreUrl(idx: number) {
+    ;(this.validateForm.get('urlArr') as FormArray).removeAt(idx)
   }
 
-  handlePasteImage = event => {
-    const items = event.clipboardData.items
-    let file = null
+  onChangeFile(data: any, key: string) {
+    this.validateForm.get(key)!.setValue(data.cdn)
+  }
 
-    if (items.length) {
-      for (let i = 0; i < items.length; i++) {
-        if (items[i].type.startsWith('image')) {
-          file = items[i].getAsFile()
-          break;
-        }
+  onSelectChange(idx: number) {
+    this.inputs.forEach((item, index) => {
+      if (idx === index) {
+        item.nativeElement.focus()
       }
-    }
-
-    if (file) {
-      this.handleUploadImage(file)
-    }
+    })
   }
 
-  handleUploadImage(file: File) {
-    const that = this
-    const fileReader = new FileReader()
-    fileReader.readAsDataURL(file)
-    fileReader.onload = function() {
-      that.uploading = true
-      that.iconUrl = this.result as string
-      const url = that.iconUrl.split(',')[1]
-      const path = `nav-${Date.now()}-${file.name}`
-
-      createFile({
-        branch: 'image',
-        message: 'create image',
-        content: url,
-        isEncode: false,
-        path
-      }).then(() => {
-        that.validateForm.get('icon')!.setValue(path)
-        that.message.success($t('_uploadSuccess'))
-      }).catch(res => {
-        that.notification.error(
-          `${$t('_error')}: ${res?.response?.status ?? 401}`,
-          $t('_uploadFail')
-        )
-      }).finally(() => {
-        that.uploading = false
+  handleTranslate(key = 'desc') {
+    let content = key === 'desc' ? this.desc : this.title
+    let transalteBody = content
+    const el = key === 'desc' ? this.inputDescRef : this.inputTitleRef
+    const start = el.nativeElement.selectionStart
+    const end = el.nativeElement.selectionEnd
+    const isSelected = start !== end
+    if (isSelected) {
+      transalteBody = content.slice(start, end)
+    }
+    if (!transalteBody) {
+      return
+    }
+    this.translating = true
+    getTranslate({
+      content: transalteBody,
+    })
+      .then((res) => {
+        const translateContent = res.data.content
+        if (translateContent) {
+          if (isSelected) {
+            const newContent =
+              content.slice(0, start) + translateContent + content.slice(end)
+            this.validateForm.get(key)!.setValue(newContent)
+          } else {
+            this.validateForm.get(key)!.setValue(translateContent)
+          }
+        }
       })
-    }
+      .finally(() => {
+        this.translating = false
+      })
   }
 
-  onChangeFile(e) {
-    const { files } = e.target
-    if (files.length <= 0) return;
-    const file = files[0]
-
-    if (!file.type.startsWith('image')) {
-      return this.message.error($t('_notUpload'))
-    }
-    this.handleUploadImage(file)
+  getScreenshot() {
+    const url = (this.validateForm.get('url')?.value || '').trim()
+    this.submitting = true
+    getScreenshot({ url })
+      .then((res) => {
+        const path = `${Date.now()}.png`
+        createImageFile({
+          branch: getImageRepo().branch,
+          message: 'create image',
+          content: res.data.image,
+          isEncode: false,
+          path,
+        })
+          .then((res) => {
+            const value = isSelfDevelop ? res.data.fullImagePath : getCDN(path)
+            this.validateForm.get('img')!.setValue(value)
+          })
+          .finally(() => {
+            this.submitting = false
+          })
+      })
+      .catch(() => {
+        this.submitting = false
+      })
   }
 
-  handleCancel() {
-    this.onCancel.emit()
+  checkRepeat() {
+    try {
+      const url = removeTrailingSlashes(this.url)
+      const { oneIndex, twoIndex, threeIndex, breadcrumb } = getClassById(
+        this.parentId,
+      )
+      const w = navs()[oneIndex].nav[twoIndex].nav[threeIndex].nav
+      const repeatData = w.find((item) => {
+        if (this.detail && item.id === this.detail.id) {
+          return false
+        }
+        return item.url === url || item.url.includes(url)
+      })
+      if (repeatData) {
+        this.notification.error(
+          $t('_repeatTip'),
+          `
+          <div>${breadcrumb.join(' / ')}</div>
+          <div>ID: ${repeatData.id}</div>
+          <div>${$t('_title')}: ${repeatData.name}</div>
+          URL: ${repeatData.url}
+          `,
+          {
+            nzDuration: 20000,
+          },
+        )
+      } else {
+        this.message.success($t('_urlNoRepeat'))
+      }
+    } catch {}
   }
 
-  handleOk() {
+  async handleOk() {
     for (const i in this.validateForm.controls) {
-      this.validateForm.controls[i].markAsDirty();
-      this.validateForm.controls[i].updateValueAndValidity();
+      this.validateForm.controls[i].markAsDirty()
+      this.validateForm.controls[i].updateValueAndValidity()
     }
 
-    const createdAt = new Date().toISOString()
-    let urls = {}
-    let {
-      title,
-      icon,
-      url,
-      top,
-      ownVisible,
-      rate,
-      desc,
-      url0,
-      url1,
-      url2,
-      tagVal0,
-      tagVal1,
-      tagVal2
-    } = this.validateForm.value
-
+    const tags: IWebTag[] = []
+    let { top, ownVisible, rate, index, topTypes } = this.validateForm.value
+    const title = this.title
+    const url = this.url
     if (!title || !url) return
 
-    title = title.trim()
+    const urlArr = this.urlArray?.value || []
+    urlArr.forEach((item: any) => {
+      if (item.id) {
+        tags.push({
+          id: item.id,
+          url: item.url.trim(),
+        })
+      }
+    })
 
-    if (tagVal0 && url0) {
-      urls[tagVal0] = url0
-    }
-    if (tagVal1 && url1) {
-      urls[tagVal1] = url1
-    }
-    if (tagVal2 && url2) {
-      urls[tagVal2] = url2
-    }
-
-    const payload = {
-      name: title,
-      createdAt: (this.detail as any)?.createdAt ?? createdAt,
-      rate: rate ?? 0,
-      desc: desc || '',
-      top: top ?? false,
-      ownVisible: ownVisible ?? false,
-      icon,
+    const payload: Record<string, any> = {
+      id: this.detail?.id,
+      name: transformSafeHTML(title),
+      desc: transformSafeHTML(this.desc),
+      breadcrumb: this.detail?.breadcrumb ?? [],
+      rate,
+      top,
+      index,
+      ownVisible,
+      icon: this.iconUrl,
       url,
-      urls
+      tags,
+      topTypes,
+      img: this.imgUrl || undefined,
     }
 
-    this.iconUrl = ''
-    this.urlArr = []
-    this.onOk.emit(payload)
+    if (this.detail) {
+      if (isLogin) {
+        const ok = updateByWeb(this.detail.id, payload as IWebProps)
+        if (ok) {
+          this.message.success($t('_modifySuccess'))
+        } else {
+          this.message.error('Update failed')
+        }
+      } else if (this.permissions.edit) {
+        this.submitting = true
+        const params = {
+          data: {
+            ...payload,
+            extra: {
+              type: ActionType.Edit,
+            },
+          },
+        }
+        await saveUserCollect(params)
+        this.message.success($t('_waitHandle'))
+      }
+    } else {
+      payload['id'] = getTempId()
+      try {
+        this.submitting = true
+        payload['breadcrumb'] = this.breadcrumb
+        if (this.isLogin) {
+          const ok = pushDataByAny(this.parentId, payload)
+          if (ok) {
+            this.message.success($t('_addSuccess'))
+            if (this.isMove) {
+              event.emit('MOVE_WEB', {
+                data: [payload],
+              })
+            }
+          }
+        } else if (this.permissions.create) {
+          const params = {
+            data: {
+              ...payload,
+              parentId: this.parentId,
+              extra: {
+                type: ActionType.Create,
+              },
+            },
+          }
+          await saveUserCollect(params)
+          this.message.success($t('_waitHandle'))
+        }
+      } catch (error: any) {
+        this.message.error(error.message)
+      }
+    }
+    this.callback()
+    this.onClose()
   }
 }

@@ -1,54 +1,140 @@
-// Copyright @ 2018-2022 xiejiahe. All rights reserved. MIT license.
+// 开源项目，未经作者同意，不得以抄袭/复制代码/修改源代码版权信息。
+// Copyright @ 2018-present xiejiahe. All rights reserved.
 // See https://github.com/xjh22222228/nav
 
-import { Component, OnInit, Input, Output, EventEmitter } from '@angular/core'
+import {
+  Component,
+  Input,
+  Output,
+  EventEmitter,
+  ViewChild,
+  ElementRef,
+} from '@angular/core'
+import { Router } from '@angular/router'
+import { CommonModule } from '@angular/common'
+import { FormsModule } from '@angular/forms'
 import { NzMessageService } from 'ng-zorro-antd/message'
-import { NzNotificationService } from 'ng-zorro-antd/notification'
-import { verifyToken } from '../../services'
-import { setToken } from '../../utils/user'
+import {
+  verifyToken,
+  createBranch,
+  authorName,
+  isStandaloneImage,
+} from 'src/api'
+import {
+  setToken,
+  removeToken,
+  removeWebsite,
+  setImageToken,
+} from 'src/utils/user'
 import { $t } from 'src/locale'
+import { isSelfDevelop } from 'src/utils/utils'
+import { NzModalModule } from 'ng-zorro-antd/modal'
+import { NzInputModule } from 'ng-zorro-antd/input'
+import config from '../../../nav.config.json'
 
 @Component({
+  standalone: true,
+  imports: [CommonModule, FormsModule, NzModalModule, NzInputModule],
   selector: 'app-login',
   templateUrl: './login.component.html',
-  styleUrls: ['./login.component.scss']
+  styleUrls: ['./login.component.scss'],
 })
-export class LoginComponent implements OnInit {
-  @Input() visible: boolean
-  @Output() onCancel = new EventEmitter()
+export class LoginComponent {
+  @Input() visible = false
+  @Output() onCancel = new EventEmitter<void>()
+  @ViewChild('input', { static: false }) input!: ElementRef
 
-  $t = $t
+  readonly $t = $t
+  readonly isSelfDevelop = isSelfDevelop
   token = ''
-  submiting = false
+  imageToken = ''
+  submitting = false
+  showImgToken = false
 
   constructor(
-    private message: NzMessageService,
-    private notification: NzNotificationService,
-  ) {}
-
-  ngOnInit() {}
-
-  hanldeCancel() {
-    this.onCancel.emit()
+    private readonly message: NzMessageService,
+    private router: Router,
+  ) {
+    if (!isSelfDevelop) {
+      this.showImgToken = isStandaloneImage()
+    }
   }
 
-  login() {
-    if (!this.token || this.token.length < 40) {
-      return this.message.error($t('_pleaseInputToken'))
+  ngAfterViewInit(): void {
+    this.inputFocus()
+  }
+
+  handleCancel(): void {
+    this.onCancel.emit()
+    this.router.navigate(['/'])
+  }
+
+  private inputFocus(): void {
+    setTimeout(() => {
+      this.input?.nativeElement?.focus()
+    }, 500)
+  }
+
+  onKey(event: KeyboardEvent): void {
+    if (event.code === 'Enter') {
+      this.login()
+    }
+  }
+
+  async login(): Promise<void> {
+    const token = this.token.trim()
+    if (!token) {
+      this.message.error($t('_pleaseInputToken'))
+      return
     }
 
-    this.submiting = true
-    verifyToken(this.token)
-      .then(() => {
-        setToken(this.token);
-        this.message.success($t('_tokenVerSuc'))
-        setTimeout(() => window.location.reload(), 2000)
-      })
-      .catch(res => {
-        this.notification.error($t('_tokenVerFail'), res.message as string)
-      })
-      .finally(() => {
-        this.submiting = false
-      })
+    if (this.showImgToken) {
+      const token = this.imageToken.trim()
+      if (!token) {
+        this.message.error('Please enter the image TOKEN')
+        return
+      }
+      try {
+        this.submitting = true
+        const authorName = config.imageRepoUrl.split('/').at(-2)
+        const res = await verifyToken(token, config.imageRepoUrl)
+        if ((res?.data?.login ?? res?.data?.username) !== authorName) {
+          this.message.error('Image Bad credentials')
+          return
+        }
+        setImageToken(token)
+      } catch {
+      } finally {
+        this.submitting = false
+      }
+    }
+
+    this.submitting = true
+
+    try {
+      const res = await verifyToken(token)
+      if (
+        !isSelfDevelop &&
+        (res?.data?.login ?? res?.data?.username) !== authorName
+      ) {
+        this.message.error('Bad credentials')
+        throw new Error('Bad credentials')
+      }
+      setToken(token)
+
+      try {
+        createBranch('image').finally(() => {
+          this.message.success($t('_tokenVerSuc'))
+          removeWebsite().finally(() => {
+            window.location.reload()
+          })
+        })
+      } catch {
+        removeToken()
+        this.submitting = false
+      }
+    } catch {
+      this.submitting = false
+    }
   }
 }
