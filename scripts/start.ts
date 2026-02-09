@@ -421,16 +421,11 @@ const main = async () => {
 
     settings.superDocTitle ||= ''
     settings.superTitle ||= ''
-    const defImgs = [
-      {
-        src: 'https://gcore.jsdelivr.net/gh/xjh22222228/nav-image@image/nav-1717494364392-ad.jpg',
-        url: 'https://haokawx.lot-ml.com/Product/index/454266',
-      },
-      {
-        src: 'https://gcore.jsdelivr.net/gh/xjh22222228/public@gh-pages/img/10.png',
-        url: '',
-      },
-    ]
+    const defImgs = []
+    const builtInAdImages = new Set([
+      'https://gcore.jsdelivr.net/gh/xjh22222228/nav-image@image/nav-1717494364392-ad.jpg',
+      'https://gcore.jsdelivr.net/gh/xjh22222228/public@gh-pages/img/10.png',
+    ])
     settings.superImages ??= defImgs
     settings.lightImages ??= defImgs
     if (!Array.isArray(settings.superImages)) {
@@ -439,6 +434,12 @@ const main = async () => {
     if (!Array.isArray(settings.lightImages)) {
       settings.lightImages = defImgs
     }
+    settings.superImages = settings.superImages.filter((item) => {
+      return !builtInAdImages.has(item?.src)
+    })
+    settings.lightImages = settings.lightImages.filter((item) => {
+      return !builtInAdImages.has(item?.src)
+    })
     settings.sideTitle ||= ''
     settings.sideDocTitle ||= ''
     settings.sideCardStyle ||= 'example'

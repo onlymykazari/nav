@@ -22,7 +22,6 @@ import { NoDataComponent } from 'src/components/no-data/no-data.component'
 import { FooterComponent } from 'src/components/footer/footer.component'
 import { FixbarComponent } from 'src/components/fixbar/index.component'
 import { ToolbarTitleWebComponent } from 'src/components/toolbar-title/index.component'
-import { SideImagesComponent } from 'src/components/side-images/index.component'
 import { ClassTabsComponent } from 'src/components/class-tabs/index.component'
 import type { INavProps } from 'src/types'
 import { SidebarComponent } from 'src/components/sidebar/index.component'
@@ -41,7 +40,6 @@ import { SidebarComponent } from 'src/components/sidebar/index.component'
     NoDataComponent,
     FooterComponent,
     FixbarComponent,
-    SideImagesComponent,
     ClassTabsComponent,
     SidebarComponent,
   ],

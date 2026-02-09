@@ -21,7 +21,6 @@ import { CardComponent } from 'src/components/card/index.component'
 import { NoDataComponent } from 'src/components/no-data/no-data.component'
 import { FooterComponent } from 'src/components/footer/footer.component'
 import { FixbarComponent } from 'src/components/fixbar/index.component'
-import { SideImagesComponent } from 'src/components/side-images/index.component'
 import { queryString, scrollIntoViewLeft } from 'src/utils'
 import { SidebarComponent } from 'src/components/sidebar/index.component'
 import type { INavThreeProp, INavProps } from 'src/types'
@@ -40,7 +39,6 @@ import event from 'src/utils/mitt'
     NoDataComponent,
     FooterComponent,
     FixbarComponent,
-    SideImagesComponent,
     SidebarComponent,
   ],
   selector: 'app-side',
