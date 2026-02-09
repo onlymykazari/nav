@@ -69,17 +69,92 @@ export const PATHS = {
   manifestIcon192: path.resolve('dist', 'browser', 'icons', 'icon-192x192.png'),
 } as const
 
-export const getConfig = () => {
-  const pkgJson = JSON.parse(fs.readFileSync(PATHS.pkg).toString())
+const pickEnv = (keys: string[], fallback: any = '') => {
+  const env = process.env
+  for (const key of keys) {
+    const value = env[key]
+    if (value != null && value !== '') {
+      return value
+    }
+  }
+  return fallback
+}
+
+const parseBoolean = (value: any, fallback: boolean): boolean => {
+  if (typeof value === 'boolean') return value
+  const str = String(value ?? '').trim().toLowerCase()
+  if (str === 'true' || str === '1') return true
+  if (str === 'false' || str === '0') return false
+  return fallback
+}
+
+const parseNumber = (value: any, fallback: number): number => {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : fallback
+}
+
+export const getMergedNavConfig = () => {
   const config = yaml.load(fs.readFileSync(PATHS.config).toString()) as Record<
     string,
     any
   >
+  const mailConfig = config.mailConfig || {}
+  const mailAuth = mailConfig.auth || {}
+  return {
+    ...config,
+    gitRepoUrl: removeTrailingSlashes(
+      pickEnv(['NAV_GIT_REPO_URL', 'GIT_REPO_URL'], config['gitRepoUrl'] || ''),
+    ).replace(/\.git$/, ''),
+    imageRepoUrl: pickEnv(
+      ['NAV_IMAGE_REPO_URL', 'IMAGE_REPO_URL'],
+      config['imageRepoUrl'],
+    ),
+    branch: pickEnv(['NAV_BRANCH', 'GIT_BRANCH'], config['branch']),
+    hashMode: parseBoolean(
+      pickEnv(['NAV_HASH_MODE', 'HASH_MODE'], config['hashMode']),
+      !!config['hashMode'],
+    ),
+    address: pickEnv(['NAV_ADDRESS', 'ADDRESS'], config['address']),
+    email: pickEnv(['NAV_EMAIL', 'EMAIL'], config['email']),
+    port: parseNumber(
+      pickEnv(['NAV_PORT', 'PORT'], config['port']),
+      Number(config['port']) || 7777,
+    ),
+    password: pickEnv(['NAV_PASSWORD', 'PASSWORD'], config['password']),
+    XFAPIPassword: pickEnv(
+      ['NAV_XFA_API_PASSWORD', 'XFA_API_PASSWORD'],
+      config['XFAPIPassword'],
+    ),
+    mailConfig: {
+      ...mailConfig,
+      host: pickEnv(['NAV_MAIL_HOST', 'MAIL_HOST'], mailConfig.host),
+      port: parseNumber(
+        pickEnv(['NAV_MAIL_PORT', 'MAIL_PORT'], mailConfig.port),
+        Number(mailConfig.port) || 465,
+      ),
+      secure: parseBoolean(
+        pickEnv(['NAV_MAIL_SECURE', 'MAIL_SECURE'], mailConfig.secure),
+        !!mailConfig.secure,
+      ),
+      auth: {
+        ...mailAuth,
+        user: pickEnv(['NAV_MAIL_USER', 'MAIL_USER'], mailAuth.user),
+        pass: pickEnv(['NAV_MAIL_PASS', 'MAIL_PASS'], mailAuth.pass),
+      },
+      title: pickEnv(['NAV_MAIL_TITLE', 'MAIL_TITLE'], mailConfig.title),
+      message: pickEnv(
+        ['NAV_MAIL_MESSAGE', 'MAIL_MESSAGE'],
+        mailConfig.message,
+      ),
+    },
+  } as const
+}
 
-  const gitRepoUrl = removeTrailingSlashes(config['gitRepoUrl'] || '').replace(
-    /\.git$/,
-    '',
-  )
+export const getConfig = () => {
+  const pkgJson = JSON.parse(fs.readFileSync(PATHS.pkg).toString())
+  const config = getMergedNavConfig()
+  const { gitRepoUrl, imageRepoUrl, branch, hashMode, address, email, port } =
+    config
 
   const zorroVersion = pkgJson.dependencies['ng-zorro-antd'].replace(
     /[^0-9.]/g,
@@ -89,12 +164,12 @@ export const getConfig = () => {
     version: pkgJson.version,
     zorroDark: `//gcore.jsdelivr.net/npm/ng-zorro-antd@${zorroVersion}/ng-zorro-antd.dark.min.css`,
     gitRepoUrl,
-    imageRepoUrl: config['imageRepoUrl'],
-    branch: config['branch'],
-    hashMode: config['hashMode'],
-    address: config['address'],
-    email: config['email'],
-    port: config['port'],
+    imageRepoUrl,
+    branch,
+    hashMode,
+    address,
+    email,
+    port,
     datetime: dayjs.tz().format('YYYY-MM-DD HH:mm'),
   } as const
 }
